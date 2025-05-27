@@ -1,0 +1,51 @@
+# Node modules
+node_modules/
+*.log
+npm-debug.log*
+
+# Metro / Cache
+.expo/
+.expo-shared/
+babel.config.js
+*.babel.js
+*.babelrc
+metro.config.js
+react-native.config.js
+
+# Build artifacts
+android/app/build/
+ios/Pods/
+ios/build/
+*.apk
+*.ipa
+
+# Expo
+dist/
+web-build/
+*.tar.gz
+
+# macOS / Linux / Windows
+.DS_Store
+*.swp
+*.swo
+Thumbs.db
+
+# Environment files
+.env
+.env.*.local
+*.env.local
+.env.local.*
+
+# VSCode / IDEs
+.vscode/
+.idea/
+
+# OS logs
+*.tgz
+*.bak
+*.orig
+*.patch
+*.tmp
+
+# Expo Go
+.expo-go
