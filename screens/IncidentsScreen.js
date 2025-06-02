@@ -7,13 +7,14 @@ import {
   TouchableOpacity,
   Alert,
   AppState,
+  Button,
 } from 'react-native';
 import { Audio } from 'expo-av';
-import { getIncidents } from '../api/incidents';
+import { getIncidents, resolveIncident } from '../api/incidents';
 import { io } from 'socket.io-client';
 
-const ALERT_INTERVAL_MINUTES = 5; // Intervalo mínimo entre alertas (5 minutos)
-const INCIDENT_WINDOW_HOURS = 1; // Janela de tempo para considerar incidentes recentes (1 hora)
+const ALERT_INTERVAL_MINUTES = 5;
+const INCIDENT_WINDOW_HOURS = 1;
 
 export default function IncidentsScreen({ navigation }) {
   const [incidents, setIncidents] = useState([]);
@@ -22,7 +23,6 @@ export default function IncidentsScreen({ navigation }) {
   const appState = useRef(AppState.currentState);
   const socketRef = useRef(null);
 
-  // Carregamento inicial
   useEffect(() => {
     fetchData();
     setupWebSocket();
@@ -34,7 +34,6 @@ export default function IncidentsScreen({ navigation }) {
     };
   }, []);
 
-  // Configura o WebSocket
   const setupWebSocket = () => {
     socketRef.current = io('http://192.168.0.32:4000');
 
@@ -44,16 +43,13 @@ export default function IncidentsScreen({ navigation }) {
 
     socketRef.current.on('novo_incidente', (novoIncidente) => {
       console.log('Novo incidente recebido:', novoIncidente);
-      
-      // Adiciona o novo incidente no início da lista
       setIncidents(prev => [novoIncidente, ...prev]);
-      
-      // Verifica se é um incidente de fogo recente
+
       if (novoIncidente.tipo_incidente === 'fire') {
         const incidentTime = new Date(`${novoIncidente.data}T${novoIncidente.hora}`);
         const agora = new Date();
         const horasDesdeIncidente = (agora - incidentTime) / (1000 * 60 * 60);
-        
+
         if (horasDesdeIncidente <= INCIDENT_WINDOW_HOURS) {
           emitirAlerta();
         }
@@ -61,7 +57,6 @@ export default function IncidentsScreen({ navigation }) {
     });
   };
 
-  // Polling a cada 10 segundos
   useEffect(() => {
     let interval = null;
 
@@ -89,12 +84,9 @@ export default function IncidentsScreen({ navigation }) {
     };
   }, []);
 
-  // Busca os incidentes
   const fetchData = async () => {
     try {
       const data = await getIncidents();
-      
-      // Ordena por data/hora decrescente
       const ordenados = [...data].sort((a, b) => {
         const dtA = new Date(`${a.data}T${a.hora}`);
         const dtB = new Date(`${b.data}T${b.hora}`);
@@ -108,24 +100,21 @@ export default function IncidentsScreen({ navigation }) {
     }
   };
 
-  // Verifica se precisa alertar
   const verificarAlerta = (data) => {
     const agora = new Date();
-    
-    // Verifica intervalo mínimo entre alertas
-    if (lastAlertRef.current && 
-        (agora - lastAlertRef.current) / (1000 * 60) < ALERT_INTERVAL_MINUTES) {
+
+    if (lastAlertRef.current &&
+      (agora - lastAlertRef.current) / (1000 * 60) < ALERT_INTERVAL_MINUTES) {
       return;
     }
 
-    // Procura por incidentes de fogo recentes
     const incidenteRecente = data.find(item => {
       if (item.tipo_incidente !== 'fire') return false;
-      
+
       const dataIncidente = new Date(`${item.data}T${item.hora}`);
       const horasDesdeIncidente = (agora - dataIncidente) / (1000 * 60 * 60);
-      
-      return horasDesdeIncidente <= INCIDENT_WINDOW_HOURS;
+
+      return horasDesdeIncidente <= INCIDENT_WINDOW_HOURS && item.status !== 'resolvido';
     });
 
     if (incidenteRecente) {
@@ -134,18 +123,15 @@ export default function IncidentsScreen({ navigation }) {
     }
   };
 
-  // Emite o alerta sonoro e visual
   const emitirAlerta = async () => {
-    Alert.alert('🚨 Alerta de Incêndio!', 'Incidente de fogo detectado!', [{ text: 'OK' }]);
+    Alert.alert('🚨 ALERTA DE INCÊNDIO!', 'INCIDENTE DE FOGO DETECTADO!', [{ text: 'OK' }]);
 
     try {
-      // Para qualquer som que esteja tocando
       if (sound) {
         await sound.stopAsync();
         await sound.unloadAsync();
       }
 
-      // Toca o alarme
       const { sound: newSound } = await Audio.Sound.createAsync(
         require('../assets/alarm.mp3')
       );
@@ -156,7 +142,6 @@ export default function IncidentsScreen({ navigation }) {
     }
   };
 
-  // Limpa o som quando o componente é desmontado
   useEffect(() => {
     return () => {
       if (sound) {
@@ -165,26 +150,41 @@ export default function IncidentsScreen({ navigation }) {
     };
   }, [sound]);
 
-  // Renderiza cada item da lista
+  const marcarComoResolvido = async (id) => {
+    try {
+      await resolveIncident(id);
+      fetchData();
+    } catch (error) {
+      Alert.alert('Erro', 'Não foi possível resolver o incidente.');
+    }
+  };
+
   const renderItem = ({ item }) => {
     const dataHora = new Date(`${item.data}T${item.hora}`);
     const formatada = dataHora.toLocaleString('pt-BR');
 
     return (
-      <TouchableOpacity
-        onPress={() => navigation.navigate('IncidentDetails', { incident: item })}
-      >
-        <View style={[
-          styles.card,
-          item.tipo_incidente === 'fire' && styles.fireCard
-        ]}>
-          <Text style={styles.title}>Câmera: {item.camera_id}</Text>
-          <Text>Status: {item.tipo_incidente}</Text>
-          <Text>Confiança: {(item.confianca * 100).toFixed(1)}%</Text>
-          <Text>Local: {item.local}</Text>
-          <Text>Data: {formatada}</Text>
-        </View>
-      </TouchableOpacity>
+      <View style={[
+        styles.card,
+        item.tipo_incidente === 'fire' && styles.fireCard,
+        item.status === 'resolvido' && styles.resolvedCard,
+      ]}>
+        <TouchableOpacity
+          onPress={() => navigation.navigate('IncidentDetails', { incident: item })}
+        >
+          <Text style={styles.text}>STATUS: {item.tipo_incidente.toUpperCase()}</Text>
+          <Text style={styles.text}>CONFIANÇA: {(item.confianca * 100).toFixed(1)}%</Text>
+          <Text style={styles.text}>DATA: {formatada.toUpperCase()}</Text>
+        </TouchableOpacity>
+
+        {item.status !== 'resolvido' && (
+          <Button
+            title="Marcar como Resolvido"
+            onPress={() => marcarComoResolvido(item.id)}
+            color="green"
+          />
+        )}
+      </View>
     );
   };
 
@@ -204,17 +204,24 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: '#f1f1f1',
-    padding: 15,
-    borderRadius: 10,
-    marginBottom: 12,
+    padding: 20,
+    borderRadius: 14,
+    marginBottom: 16,
   },
   fireCard: {
     backgroundColor: '#ffdddd',
-    borderLeftWidth: 4,
+    borderLeftWidth: 6,
     borderLeftColor: 'red',
   },
-  title: {
-    fontWeight: 'bold',
-    marginBottom: 5,
+  text: {
+    fontSize: 19,
+    color: '#333',
+    marginBottom: 6,
+    fontWeight: '600',
   },
+  resolvedCard: {
+  backgroundColor: '#ddffdd',
+  borderLeftWidth: 6,
+  borderLeftColor: 'green',
+},
 });

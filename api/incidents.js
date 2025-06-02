@@ -6,6 +6,12 @@ const api = axios.create({
 });
 
 export const getIncidents = async () => {
-  const response = await api.get('/logs'); 
+  const response = await api.get('/logs');
+  return response.data;
+};
+
+// ✅ Adiciona esta função para resolver incidentes
+export const resolveIncident = async (id) => {
+  const response = await api.put(`/logs/${id}/resolver`);
   return response.data;
 };
